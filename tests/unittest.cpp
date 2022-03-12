@@ -8,6 +8,7 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <exception>
 
 #include "catch.hpp"
 #include "crow.h"
@@ -2787,3 +2788,60 @@ TEST_CASE("task_timer")
     io_service.stop();
     io_thread.join();
 } // task_timer
+
+/*struct default_exception : std::exception 
+{
+    const char* what()
+    { 
+        return "default handler";
+    }
+};*/
+
+TEST_CASE("custom_exception_handler")
+{
+    SimpleApp app;
+
+    CROW_ROUTE(app, "/runtime_error/")
+    ([](const request &, response &) {
+        throw runtime_error("rt thrown");
+    });
+
+    CROW_ROUTE(app, "/unspecified_exception/")
+    ([](const request &, response &) {
+        throw std::exception();
+    });
+
+    app.exception<runtime_error>(
+        [](const runtime_error &e, response &res) {
+            res.write(e.what());
+            res.code = 501; // just need a different code to prove this was called
+            res.end();
+    });
+
+    app.validate();
+
+    {
+        request req;
+        response res;
+
+        req.url = "/runtime_error/";
+
+        app.handle(req, res);
+
+        CHECK(501 == res.code);
+        CHECK("rt thrown" == res.body);
+    }
+
+    {
+        request req;
+        response res;
+        
+        req.url = "/unspecified_exception/";
+        
+        app.handle(req,res);
+
+        CHECK(500 == res.code);
+        
+
+    }
+}

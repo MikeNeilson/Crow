@@ -4,6 +4,7 @@
 #include <string>
 #include <stdexcept>
 #include <iostream>
+#include <functional>
 #include "crow/utility.h"
 
 namespace crow
@@ -272,6 +273,11 @@ namespace crow
     {
         return string_params[index];
     }
+
+    class response;
+    template<typename T=std::exception>
+    using exception_handler_func = std::function<void(const T&, response &res)>;
+
 } // namespace crow
 
 // clang-format off

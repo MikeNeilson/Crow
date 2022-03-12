@@ -126,6 +126,11 @@ namespace crow
             return port_;
         }
 
+        template<typename ExceptionType>
+        self_t& exception(exception_handler_func<ExceptionType>&& func){
+            router_.exception<ExceptionType>(std::move(func));
+            return *this;
+        }
 
         /// Set the connection timeout in seconds (default is 5)
         self_t& timeout(std::uint8_t timeout)

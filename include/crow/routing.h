@@ -7,6 +7,9 @@
 #include <memory>
 #include <boost/lexical_cast.hpp>
 #include <vector>
+#include <typeinfo>
+#include <typeindex>
+#include <functional>
 
 #include "crow/common.h"
 #include "crow/http_response.h"
@@ -1161,7 +1164,13 @@ namespace crow
     {
     public:
         Router()
-        {}
+        {
+            this->exception<std::exception>([](const std::exception &e, response &res){
+                CROW_LOG_ERROR << "An uncaught exception occurred: " << e.what();
+                res = response(500);
+                res.end();
+            });
+        }
 
         DynamicRule& new_rule_dynamic(const std::string& rule)
         {
@@ -1556,10 +1565,14 @@ namespace crow
                 rules[rule_index]->handle(req, res, std::get<2>(found));
             }
             catch (std::exception& e)
-            {
-                CROW_LOG_ERROR << "An uncaught exception occurred: " << e.what();
-                res = response(500);
-                res.end();
+            {                
+                auto exception_handler = exceptions_.find(std::type_index(typeid(e)));
+                if( exception_handler != exceptions_.end() ){
+                    exception_handler->second(e,res);             
+                } else {
+                    exceptions_[std::type_index(typeid(std::exception))](e,res);
+                }
+                
                 return;
             }
             catch (...)
@@ -1585,6 +1598,14 @@ namespace crow
             return blueprints_;
         }
 
+        template<typename ExceptionType>
+        void exception( exception_handler_func<ExceptionType>&& func) {
+            static_assert( is_base_of<std::exception,ExceptionType>::value, "Type must be derieved from std::exception");            
+            exceptions_[std::type_index(typeid(ExceptionType))] = [func]( const std::exception& e, response& res){
+                func(static_cast<const ExceptionType&>(e),res);
+            };
+        }
+
     private:
         CatchallRule catchall_rule_;
 
@@ -1600,5 +1621,6 @@ namespace crow
         std::array<PerMethod, static_cast<int>(HTTPMethod::InternalMethodCount)> per_methods_;
         std::vector<std::unique_ptr<BaseRule>> all_rules_;
         std::vector<Blueprint*> blueprints_;
+        std::unordered_map<std::type_index,exception_handler_func<>> exceptions_;
     };
 } // namespace crow
